@@ -1,0 +1,23 @@
+#pragma once
+
+#define TEAM_ACCOUNT name("luckyaddress")
+#define DIVI_ACCOUNT name("eoswinbonus1")
+
+#define TOKEN_CONTRACT name("eosio.token")
+#define GAME_TOKEN_CONTRACT name("eoslucktoken")
+
+#define EOS_SYMBOL symbol("EOS", 4)
+#define GAME_SYMBOL symbol("LUCKY", 4)
+
+#define ACTIVITY_ACCOUNT name("activity")
+#define TOKEN_ACCOUNT GAME_TOKEN_CONTRACT
+#define HISTORY_NUM 5
+#define CLAIM_BONUS_HISTORY_NUM 100
+
+#define STATUS_ID_BONUS_ACTIVE 101
+#define STATUS_ID_CLAIM_BONUS_COUNT  102
+#define STATUS_ID_CLAIM_SUB_TOKEN_ACTIVE 103
+#define STATUS_ID_CLAIM_PEROID_BASE_TIME 104
+#define STATUS_ID_CLAIM_PEROID_ACC_INTERVAL 105
+#define STATUS_ID_CLAIM_PEROID_CLAIM_INTERVAL 106
+#define STATUS_ID_TOKEN_SNAPSHOT_TIME         107
