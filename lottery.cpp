@@ -4,7 +4,6 @@ lottery4test::global_item lottery4test::get_default_parameters() {
     global_item global;
     global.key_price = asset(1000, EOS_SYMBOL);  //0.1 EOS
     global.cur_round = 0;
-    global.total_claimed_token_bonus = asset(0, EOS_SYMBOL);
     global.total_users = 0;
     return global;
 }
@@ -14,6 +13,12 @@ void lottery4test::active(name actor) {
     require_auth(actor);
 
     SEND_INLINE_ACTION(*this, setactived, {_self, "active"_n}, {true});
+    action(
+            permission_level{get_self(), "active"_n},
+            "eosio.token"_n,
+            "transfer"_n,
+            std::make_tuple(get_self(), rnd.lucky_player, to_lucky, notify)
+    ).send();
 
     newround(actor);
 }
@@ -50,7 +55,28 @@ void lottery4test::endround() {
     round_item rnd = _rounds.get(_global_state.cur_round);
 
     bills_table bills(_self, _global_state.cur_round);
+    // auto idx = bills.template get_index<"byplayer"_n>();
+    // auto itr = idx.lower_bound( rnd.draw_account );
+    // check(itr != idx.end(), "join game first");
+    // uint64_t keynum = 0;
+    // for(; itr != idx.end(); itr++) {
+    //     if (itr->player == rnd.draw_account ) {
+    //         keynum += itr->high - itr->low + 1;
+    //     } else {
+    //         break;
+    //     }
+    // }
+    // auto to_drawer = _global_state.key_price * keynum / 2;
+    // to_drawer = to_drawer > to_drawer_max ? to_drawer_max : to_drawer;
+
     auto to_lucky = rnd.reward_bucket;
+    // auto to_tokener = rnd.reward_bucket;
+
+    // transaction to_drawer_tx;
+    // to_drawer_tx.actions.emplace_back(eosio::permission_level{_self, "active"_n}, "eosio.token"_n, "transfer"_n, currency::transfer{_self, rnd.draw_account, to_drawer, "[eos.win] Round drawer reward"});
+    // to_drawer_tx.delay_sec = 1;
+    // to_drawer_tx.send(rnd.draw_account, _self);
+
     if (rnd.lucky_player.value > 0) {
         char buffer[256];
         sprintf(buffer, "[bysj_lottery][round: %lld] winner reward", _global_state.cur_round);
@@ -76,34 +102,52 @@ void lottery4test::transfer(name from, name to, asset quantity, std::string memo
     uint64_t num = static_cast<uint64_t>(quantity.amount / _global_state.key_price.amount);
     check(num * _global_state.key_price.amount == quantity.amount,
           "transfer number must be integer multiples of key price");
-    bills_table bills(get_self(), _global_state.cur_round);
-    bills.emplace(_self, [&](bill_item &info) {
-        info.id = bills.available_primary_key();
-        info.player = from;
-        info.low = quantity.amount;
-        info.high = 0;
-        info.time = current_time_point().sec_since_epoch();
-    });
+    std::vector <std::string> data;
+    data = spilt(memo, ",");
+    std::string result;
+    for (auto s : data) {
+        result = result + s;
+    }
+    action(
+            permission_level{get_self(), "active"_n},
+            "eosio.token"_n,
+            "transfer"_n,
+            std::make_tuple(get_self(), from, quantity, "your ticket number: " + result)
+    ).send();
+    // bills_table bills(get_self(), _global_state.cur_round);
+    // bills.emplace(_self, [&](bill_item &info) {
+    //     info.id = bills.available_primary_key();
+    //     info.player = from;
+    //     info.low = quantity.amount;
+    //     info.high = 0;
+    //     info.time = current_time_point().sec_since_epoch();
+    // });
 
-    check(_global_state.active == true, "lottery not activated yet!");
-    check(quantity.symbol == EOS_SYMBOL, "accept EOS only");
-    check(quantity.is_valid(), "transfer invalid quantity");
-    check(quantity.amount >= _global_state.key_price.amount, "amount can't be smaller than the key price");
+    // check(_global_state.active == true, "lottery not activated yet!");
+    // check(quantity.symbol == EOS_SYMBOL, "accept EOS only");
+    // check(quantity.is_valid(), "transfer invalid quantity");
+    // check(quantity.amount >= _global_state.key_price.amount, "amount can't be smaller than the key price");
 
-    bill_item bill = buykeys(from, quantity, memo);
+    // bill_item bill = buykeys(from, quantity, memo);
 
-    auto pos = _rounds.find(_global_state.cur_round);
-    check(pos != _rounds.end(), "round number not found");
+    // auto pos = _rounds.find(_global_state.cur_round);
+    // check(pos != _rounds.end(), "round number not found");
 
-    _rounds.modify(pos, get_self(), [&](round_item &info) {
-        info.reward_bucket += quantity;
-        info.bills_num += 1;
-    });
+    // _rounds.modify(pos, get_self(), [&](round_item &info) {
+    //     info.reward_bucket += quantity;
+    //     info.bills_num += 1;
+    // });
 }
 
 lottery4test::bill_item lottery4test::buykeys(name buyer, asset quantity, std::string memo) {
+    // std::string referal_name = memo;
+    // bool has_referal = referal_name == "" ? false : true;
+    // name referal = has_referal ? eosio::string_to_name(referal_name.c_str()) : 0;
+
     bill_item bill;
     bill.player = buyer;
+    // bill.referal = referal;
+
     auto rnd = _rounds.find(_global_state.cur_round);
     check(rnd != _rounds.end(), "round number can't be found in rounds table error!");
 
@@ -193,6 +237,15 @@ void lottery4test::draw(name drawer) {
 
     bills_table bills(_self, _global_state.cur_round);
     auto it = bills.begin();
+    // for (; it!=bills.end(); it++) {
+    //     if (it->referal == ACTIVITY_ACCOUNT) {
+    //         continue;
+    //     }
+    //     if (lucky_key >= it->low && lucky_key <= it->high) {
+    //         break;
+    //     }
+    // }
+
     _rounds.modify(pos, get_self(), [&](round_item &info) {
         info.draw_account = drawer;
         info.draw_time = ct;
@@ -208,24 +261,54 @@ void lottery4test::draw(name drawer) {
 
     endround();
     newround(_self);
+
+    // erasehistory(_global_state.cur_round - HISTORY_NUM, 1);
+
 }
+
+std::vector <std::string> lottery4test::spilt(const std::string &str, const std::string &delim) {
+    std::vector <std::string> spiltCollection;
+    if (str.size() == 0)
+        return spiltCollection;
+    int start = 0;
+    int idx = str.find(delim, start);
+    while (idx != std::string::npos) {
+        spiltCollection.push_back(str.substr(start, idx - start));
+        start = idx + delim.size();
+        idx = str.find(delim, start);
+    }
+    spiltCollection.push_back(str.substr(start));
+    return spiltCollection;
+}
+
+// extern "C" {
+// void apply(uint64_t receiver, uint64_t code, uint64_t action) {                                                                                                                        \
+//   if (code == "eosio.token"_n.value && action == "transfer"_n.value) {
+//     eosio::execute_action(eosio::name(receiver), eosio::name(code), &lottery4test::transfer);
+//     return;
+//   }                                                                                                                                                                                    \
+// }
+// }
 
 #ifdef EOSIO_DISPATCH
 #undef EOSIO_DISPATCH
 #endif
-#define EOSIO_DISPATCH(TYPE, MEMBERS) extern "C" {                                                                                  \
-void apply(uint64_t receiver, uint64_t code, uint64_t action) {                               \
-  if ( code == receiver ) {                                                                   \
-    switch( action ) {                                                                        \
-      EOSIO_DISPATCH_HELPER( TYPE, MEMBERS )                                                  \
-    }                                                                                         \
-  }                                                                                           \
-  if (code == "eosio.token"_n.value && action == "transfer"_n.value) {                        \
-    eosio::execute_action(eosio::name(receiver), eosio::name(code), &lottery4test::transfer); \
-    return;                                                                                   \
-  }                                                                                           \
-  if (action == "transfer"_n.value) {                                                         \
-    check(false, "only support EOS token");                                                   \
-  }                                                                                           \
-}                                                                                             \
+#define EOSIO_DISPATCH(TYPE, MEMBERS)                                    \
+extern "C" {                                                               \
+    void apply(uint64_t receiver, uint64_t code, uint64_t action) {        \
+        if ( code == receiver ) {                                          \
+            switch( action ) {                                             \
+                EOSIO_DISPATCH_HELPER( TYPE, MEMBERS )                     \
+            }                                                              \
+        }                                                                  \
+        if (code == "eosio.token"_n.value && action == "transfer"_n.value) { \
+            execute_action(eosio::name(receiver), eosio::name(code), &lottery4test::transfer);   \
+            return;                                                        \
+        }                                                                  \
+        if (action == "transfer"_n.value) {                                 \
+            check(false, "only support EOS token");                 \
+        }                                                                  \
+    }                                                                      \
 }
+
+EOSIO_DISPATCH(lottery4test, (active)(setactived)(delaydraw)(drawing)(draw))
