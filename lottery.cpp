@@ -1,6 +1,6 @@
 #include "lottery.hpp"
 
-lottery4test::global_item lottery4test::get_default_parameters() {
+lottery::global_item lottery::get_default_parameters() {
     global_item global;
     global.key_price = asset(1000, EOS_SYMBOL);  //0.1 EOS
     global.cur_round = 0;
@@ -8,41 +8,33 @@ lottery4test::global_item lottery4test::get_default_parameters() {
     return global;
 }
 
-void lottery4test::active(name actor) {
+void lottery::active(name actor) {
     check(_global_state.active == false, "lottery can't be actived twice!");
     require_auth(actor);
 
     SEND_INLINE_ACTION(*this, setactived, {_self, "active"_n}, {true});
-    action(
-            permission_level{get_self(), "active"_n},
-            "eosio.token"_n,
-            "transfer"_n,
-            std::make_tuple(get_self(), rnd.lucky_player, to_lucky, notify)
-    ).send();
 
     newround(actor);
 }
 
-void lottery4test::setactived(bool actived) {
+void lottery::setactived(bool actived) {
     require_auth(_self);
     _global_state.active = actived;
 }
 
-void lottery4test::newround(name actor) {
+void lottery::newround(name actor) {
     uint64_t next = _global_state.cur_round + 1;
     check(next > _global_state.cur_round, "new round number is smaller than or equal with the old!");
 
     asset next_bucket = asset(0, EOS_SYMBOL);
     auto rnd_pos = _rounds.find(_global_state.cur_round);
-    auto fee_pos = _roundfee.find(_global_state.cur_round);
-    if (rnd_pos != _rounds.end() && fee_pos != _roundfee.end() && rnd_pos->lucky_player.value <= 0) {
-        next_bucket = fee_pos->to_lucky;
+    if (rnd_pos != _rounds.end()) {
+        next_bucket = rnd_pos->reward_bucket;
     }
 
     _rounds.emplace(actor, [&](round_item &info) {
         info.round = next;
         info.bills_num = 0;
-        info.last_key = 0;
         info.reward_bucket = next_bucket;
         info.start_time = current_time_point().sec_since_epoch();
         info.draw_time = 0;
@@ -51,51 +43,11 @@ void lottery4test::newround(name actor) {
     _global_state.cur_round = next;
 }
 
-void lottery4test::endround() {
-    round_item rnd = _rounds.get(_global_state.cur_round);
-
-    bills_table bills(_self, _global_state.cur_round);
-    // auto idx = bills.template get_index<"byplayer"_n>();
-    // auto itr = idx.lower_bound( rnd.draw_account );
-    // check(itr != idx.end(), "join game first");
-    // uint64_t keynum = 0;
-    // for(; itr != idx.end(); itr++) {
-    //     if (itr->player == rnd.draw_account ) {
-    //         keynum += itr->high - itr->low + 1;
-    //     } else {
-    //         break;
-    //     }
-    // }
-    // auto to_drawer = _global_state.key_price * keynum / 2;
-    // to_drawer = to_drawer > to_drawer_max ? to_drawer_max : to_drawer;
-
-    auto to_lucky = rnd.reward_bucket;
-    // auto to_tokener = rnd.reward_bucket;
-
-    // transaction to_drawer_tx;
-    // to_drawer_tx.actions.emplace_back(eosio::permission_level{_self, "active"_n}, "eosio.token"_n, "transfer"_n, currency::transfer{_self, rnd.draw_account, to_drawer, "[eos.win] Round drawer reward"});
-    // to_drawer_tx.delay_sec = 1;
-    // to_drawer_tx.send(rnd.draw_account, _self);
-
-    if (rnd.lucky_player.value > 0) {
-        char buffer[256];
-        sprintf(buffer, "[bysj_lottery][round: %lld] winner reward", _global_state.cur_round);
-        std::string notify = buffer;
-        action(
-                permission_level{get_self(), "active"_n},
-                "eosio.token"_n,
-                "transfer"_n,
-                std::make_tuple(get_self(), rnd.lucky_player, to_lucky, notify)
-        ).send();
-    }
-
-    _roundfee.emplace(_self, [&](auto &info) {
-        info.round = _global_state.cur_round;
-        info.to_lucky = to_lucky;
-    });
+void lottery::endround() {
+  
 }
 
-void lottery4test::transfer(name from, name to, asset quantity, std::string memo) {
+void lottery::transfer(name from, name to, asset quantity, std::string memo) {
     if (from == _self || to != _self) {
         return;
     }
@@ -104,169 +56,163 @@ void lottery4test::transfer(name from, name to, asset quantity, std::string memo
           "transfer number must be integer multiples of key price");
     std::vector <std::string> data;
     data = spilt(memo, ",");
-    std::string result;
-    for (auto s : data) {
-        result = result + s;
+    check(data.size()==6,"the count of ticket number should be exactly six");
+    std::vector <int> ticket;
+    for(auto s:data){
+      check(stoi(s),"number format failure");
+      ticket.push_back(stoi(s));
     }
-    action(
-            permission_level{get_self(), "active"_n},
-            "eosio.token"_n,
-            "transfer"_n,
-            std::make_tuple(get_self(), from, quantity, "your ticket number: " + result)
-    ).send();
-    // bills_table bills(get_self(), _global_state.cur_round);
-    // bills.emplace(_self, [&](bill_item &info) {
-    //     info.id = bills.available_primary_key();
-    //     info.player = from;
-    //     info.low = quantity.amount;
-    //     info.high = 0;
-    //     info.time = current_time_point().sec_since_epoch();
-    // });
+    
+    check(_global_state.active == true, "lottery not activated yet!");
+    check(quantity.symbol == EOS_SYMBOL, "accept EOS only");
+    check(quantity.is_valid(), "transfer invalid quantity");
+    check(quantity.amount >= _global_state.key_price.amount, "amount can't be smaller than the key price");
+    
+    buykeys(from, quantity, memo);
 
-    // check(_global_state.active == true, "lottery not activated yet!");
-    // check(quantity.symbol == EOS_SYMBOL, "accept EOS only");
-    // check(quantity.is_valid(), "transfer invalid quantity");
-    // check(quantity.amount >= _global_state.key_price.amount, "amount can't be smaller than the key price");
+    auto pos = _rounds.find(_global_state.cur_round);
+    check(pos != _rounds.end(), "round number not found");
 
-    // bill_item bill = buykeys(from, quantity, memo);
-
-    // auto pos = _rounds.find(_global_state.cur_round);
-    // check(pos != _rounds.end(), "round number not found");
-
-    // _rounds.modify(pos, get_self(), [&](round_item &info) {
-    //     info.reward_bucket += quantity;
-    //     info.bills_num += 1;
-    // });
+    _rounds.modify(pos, get_self(), [&](round_item &info) {
+        info.reward_bucket += quantity;
+        info.bills_num += 1;
+    });
 }
 
-lottery4test::bill_item lottery4test::buykeys(name buyer, asset quantity, std::string memo) {
-    // std::string referal_name = memo;
-    // bool has_referal = referal_name == "" ? false : true;
-    // name referal = has_referal ? eosio::string_to_name(referal_name.c_str()) : 0;
-
-    bill_item bill;
-    bill.player = buyer;
-    // bill.referal = referal;
-
+void lottery::buykeys(name buyer, asset quantity, std::string memo) {
     auto rnd = _rounds.find(_global_state.cur_round);
     check(rnd != _rounds.end(), "round number can't be found in rounds table error!");
 
-    uint64_t num = static_cast<uint64_t>(quantity.amount / _global_state.key_price.amount);
-    check(num * _global_state.key_price.amount == quantity.amount,
-          "transfer number must be integer multiples of key price");
-
-    bill.low = rnd->last_key + 1 + num;
-    check(bill.low > rnd->last_key, "low key is out of range while buy keys");
-
-    bill.high = bill.low + num - 1;
-    check(bill.high > rnd->last_key, "high key is out of range while buy keys");
-
-    bill.time = current_time_point().sec_since_epoch();
-
     bills_table bills(_self, _global_state.cur_round);
-    bill.id = bills.available_primary_key();
     bills.emplace(_self, [&](bill_item &info) {
-        info = bill;
+        info.bill_id = bills.available_primary_key();
+        info.player = buyer;
+        info.data = memo;
+        info.time = current_time_point().sec_since_epoch();
     });
-
-    _rounds.modify(rnd, buyer, [&](round_item &info) {
-        info.last_key = bill.high;
-    });
-
     _global_state.total_users += 1;
-
-    return bill;
 }
 
-
-uint64_t lottery4test::randomkey(uint64_t max) {
+//get sha256 hash
+uint64_t lottery::randomkey() {
     checksum256 result;
-    static uint64_t seed = static_cast<uint64_t>((int) &result);
+    static uint64_t seed = static_cast<uint64_t>((int)&result);
     auto rnd = _rounds.find(_global_state.cur_round);
-    auto mixedBlock = tapos_block_prefix() + tapos_block_num() + rnd->reward_bucket.amount + seed +
-                      current_time_point().sec_since_epoch();;
-
+		auto mixedBlock = tapos_block_prefix() + tapos_block_num() + rnd->reward_bucket.amount + seed + current_time_point().sec_since_epoch();
     seed += (mixedBlock >> 33);
-
     const char *mixedChar = reinterpret_cast<const char *>(&mixedBlock);
-    result = sha256((char *) mixedChar, sizeof(mixedChar));
-    const uint64_t *p64 = reinterpret_cast<const uint64_t *>(&result);
-
-    check(max > 0, "random max must > 0");
-    return (p64[1] % max) + 1;
+	  result=sha256((char *)mixedChar, sizeof(mixedChar));
+	  return result;
 }
 
-void lottery4test::delaydraw(name drawer) {
-    require_auth(drawer);
+//form lottery number
+std::string lottery::keytostring(uint64_t randomkey){
+		auto checksumBytes = result.extract_as_byte_array().data();
+    uint64_t num1, num2, num3,num4;
+    memcpy(&num1, &checksumBytes[0], sizeof(num1));
+    memcpy(&num2, &checksumBytes[7], sizeof(num2));
+	  memcpy(&num3, &checksumBytes[14], sizeof(num3));
+	  memcpy(&num4, &checksumBytes[21], sizeof(num4));
+	  num1=num1%33;
+	  num2=num2%33;
+	  num3=num3%33;
+	  num4=num4%33;
+	  std::string lottery_number=std::to_string(num1)+std::string(",")+std::to_string(num2)+std::string(",")+std::to_string(num3)+std::string(",")+std::to_string(num4);
+	  return lottery_number;
+}
+
+void lottery::delaydraw() {
+    require_auth(get_self());
 
     check(_global_state.active == true, "lottery has not been actived!");
 
     auto pos = _rounds.find(_global_state.cur_round);
     check(pos != _rounds.end(), "round is missing!");
-    check(pos->last_key > 0, "none buy keys");
+    // check(pos->last_key > 0, "none buy keys");
 
-    auto ct = current_time_point().sec_since_epoch();;
+    auto ct = current_time_point().sec_since_epoch();
     check(ct > (pos->start_time + useconds_draw_interval), "draw time has not cool down!");
 
-    // players_table players(_self, _global_state.cur_round);
-    // players.get(drawer, "join game first!");
-
     transaction dr;
-    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "drawing"_n, drawer);
+    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "drawing"_n, get_self());
     dr.delay_sec = 1;
     dr.send(get_self().value, _self);
 }
 
-void lottery4test::drawing(name drawer) {
-    require_auth(_self);
+void lottery::drawing(name drawer) {
+    require_auth(get_self());
 
     transaction dr;
-    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "draw"_n, drawer);
+    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "draw"_n, get_self());
     dr.delay_sec = 1;
     dr.send(get_self().value, get_self());
 }
 
-void lottery4test::draw(name drawer) {
-    require_auth(_self);
+void lottery::draw(name drawer) {
+    require_auth(get_self());
 
     auto pos = _rounds.find(_global_state.cur_round);
 
     auto ct = current_time_point().sec_since_epoch();
 
-    uint64_t lucky_key = randomkey(pos->last_key);
-
+    // uint64_t lucky_key = randomkey(pos->last_key);
+    std::vector <int> temp;
     bills_table bills(_self, _global_state.cur_round);
     auto it = bills.begin();
-    // for (; it!=bills.end(); it++) {
-    //     if (it->referal == ACTIVITY_ACCOUNT) {
-    //         continue;
-    //     }
-    //     if (lucky_key >= it->low && lucky_key <= it->high) {
-    //         break;
-    //     }
-    // }
-
+    int dj=0;
+    for (; it!=bills.end(); it++) {
+      std::vector <std::string> data;
+      data = spilt(it->data, ",");
+      check(data.size()==6,"the count of ticket number should be exactly six");
+      std::vector <int> ticket;
+      for(auto s:data){
+        check(stoi(s),"number format failure");
+        ticket.push_back(stoi(s));
+      }
+     dj++;
+    }
+    // action(
+    //       permission_level{get_self(), "active"_n},
+    //       "eosio.token"_n,
+    //       "transfer"_n,
+    //       std::make_tuple(get_self(), "testacc3bysj"_n, asset(1000, EOS_SYMBOL),std::string("reward"))
+    // ).send();
+    asset next_bucket = asset(0, EOS_SYMBOL);
+    if (pos != _rounds.end()) {
+        next_bucket = pos->reward_bucket;
+    }
+    
+    asset reward_sum = asset(0, EOS_SYMBOL);
+   
+    it = bills.begin();
+    for (; it!=bills.end(); it++) {
+      action(
+            permission_level{get_self(), "active"_n},
+            "eosio.token"_n,
+            "transfer"_n,
+            std::make_tuple(get_self(), it->player, next_bucket/10/dj,std::string("reward for bill_id: ") + std::to_string(it->bill_id))
+      ).send();
+      reward_sum+=next_bucket/10/dj;
+      
+    }
+    
+    // resolve result
+    
     _rounds.modify(pos, get_self(), [&](round_item &info) {
-        info.draw_account = drawer;
+        // info.draw_account = drawer;
+        info.reward_bucket-=reward_sum;
         info.draw_time = ct;
-        info.lucky_key = lucky_key;
-
-        if (it == bills.end()) {
-            info.lucky_player = "active"_n;
-        } else {
-            info.lucky_player = it->player;
-        }
-
+        // info.lucky_key = lucky_key;
     });
 
-    endround();
-    newround(_self);
+    // endround();
+    // newround(_self);
 
     // erasehistory(_global_state.cur_round - HISTORY_NUM, 1);
 
 }
 
-std::vector <std::string> lottery4test::spilt(const std::string &str, const std::string &delim) {
+std::vector <std::string> lottery::spilt(const std::string &str, const std::string &delim) {
     std::vector <std::string> spiltCollection;
     if (str.size() == 0)
         return spiltCollection;
@@ -281,15 +227,6 @@ std::vector <std::string> lottery4test::spilt(const std::string &str, const std:
     return spiltCollection;
 }
 
-// extern "C" {
-// void apply(uint64_t receiver, uint64_t code, uint64_t action) {                                                                                                                        \
-//   if (code == "eosio.token"_n.value && action == "transfer"_n.value) {
-//     eosio::execute_action(eosio::name(receiver), eosio::name(code), &lottery4test::transfer);
-//     return;
-//   }                                                                                                                                                                                    \
-// }
-// }
-
 #ifdef EOSIO_DISPATCH
 #undef EOSIO_DISPATCH
 #endif
@@ -302,7 +239,7 @@ extern "C" {                                                               \
             }                                                              \
         }                                                                  \
         if (code == "eosio.token"_n.value && action == "transfer"_n.value) { \
-            execute_action(eosio::name(receiver), eosio::name(code), &lottery4test::transfer);   \
+            execute_action(eosio::name(receiver), eosio::name(code), &lottery::transfer);   \
             return;                                                        \
         }                                                                  \
         if (action == "transfer"_n.value) {                                 \
@@ -311,4 +248,5 @@ extern "C" {                                                               \
     }                                                                      \
 }
 
-EOSIO_DISPATCH(lottery4test, (active)(setactived)(delaydraw)(drawing)(draw))
+EOSIO_DISPATCH(lottery, (active)(randomkey)(setactived)(delaydraw))
+

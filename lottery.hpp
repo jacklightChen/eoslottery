@@ -4,26 +4,27 @@
 #include <eosio/singleton.hpp>
 #include <eosio/transaction.hpp>
 #include <eosio/crypto.hpp>
-#include "config.hpp"
+
+#define TOKEN_CONTRACT "eosio.token"_n
+#define EOS_SYMBOL symbol("EOS", 4)
 
 using namespace eosio;
 
-class [[eosio::contract("lottery4test")]] lottery4test : public contract {
+class [[eosio::contract]] lottery : public contract {
   public:
     using contract::contract;
-    lottery4test(eosio::name receiver, eosio::name code, datastream<const char*> ds):contract(receiver, code, ds)
-    ,_global(get_self(), get_first_receiver().value),
-    _rounds(get_self(), get_first_receiver().value),
-    _roundfee(get_self(), get_first_receiver().value)
+    lottery(eosio::name receiver, eosio::name code, datastream<const char*> ds):contract(receiver, code, ds)
+    ,_global(receiver, receiver.value),
+    _rounds(receiver, receiver.value),
+    _results(receiver, receiver.value)
     {
       _global_state = _global.exists() ? _global.get() : get_default_parameters();
     }
     
-    ~lottery4test() {
+    ~lottery() {
         _global.set(_global_state, _self);
     }
     
-    //2 hour
     const uint64_t useconds_draw_interval = 2*3600*uint64_t(1000000);
     
     struct [[eosio::table]] global_item {
@@ -55,9 +56,9 @@ class [[eosio::contract("lottery4test")]] lottery4test : public contract {
 
     void transfer(name from, name to, asset quantity, std::string memo);
     
-    bill_item buykeys(name buyer, asset quantity, std::string memo);
+    void buykeys(name buyer, asset quantity, std::string memo);
 
-    uint64_t randomkey(uint64_t max);
+    uint64_t randomkey();
     
     [[eosio::action]]
     void active(name actor);
@@ -66,15 +67,16 @@ class [[eosio::contract("lottery4test")]] lottery4test : public contract {
     void setactived(bool actived);
     
     [[eosio::action]]
-    void delaydraw(name drawer);
+    void delaydraw();
 
-    [[eosio::action]]
     void drawing(name drawer);
 
-    [[eosio::action]]
     void draw(name drawer);
-			      
+		
 		std::vector<std::string> spilt(const std::string &str, const std::string &delim);
+		
+		std::string keytostring(uint64_t randomkey);
+		
   private:
     struct [[eosio::table]] round_item {
         uint64_t round;
@@ -87,7 +89,7 @@ class [[eosio::contract("lottery4test")]] lottery4test : public contract {
     };
     typedef eosio::multi_index<"rounds"_n, round_item> rounds_table;
     
-    struct round_result {
+    struct [[eosio::table]] round_result {
         uint64_t bill_id;
         asset    reward;
         uint64_t primary_key()const {return bill_id;}
@@ -100,4 +102,3 @@ class [[eosio::contract("lottery4test")]] lottery4test : public contract {
     rounds_table _rounds;
     results_table _results;
 };
-

@@ -1,0 +1,179 @@
+{
+    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT ",
+    "version": "eosio::abi/1.1",
+    "types": [],
+    "structs": [
+        {
+            "name": "active",
+            "base": "",
+            "fields": [
+                {
+                    "name": "actor",
+                    "type": "name"
+                }
+            ]
+        },
+        {
+            "name": "bill_item",
+            "base": "",
+            "fields": [
+                {
+                    "name": "bill_id",
+                    "type": "uint64"
+                },
+                {
+                    "name": "player",
+                    "type": "name"
+                },
+                {
+                    "name": "data",
+                    "type": "string"
+                },
+                {
+                    "name": "time",
+                    "type": "uint64"
+                }
+            ]
+        },
+        {
+            "name": "delaydraw",
+            "base": "",
+            "fields": []
+        },
+        {
+            "name": "global_item",
+            "base": "",
+            "fields": [
+                {
+                    "name": "key_price",
+                    "type": "asset"
+                },
+                {
+                    "name": "cur_round",
+                    "type": "uint64"
+                },
+                {
+                    "name": "total_users",
+                    "type": "uint64"
+                },
+                {
+                    "name": "active",
+                    "type": "bool"
+                }
+            ]
+        },
+        {
+            "name": "randomkey",
+            "base": "",
+            "fields": []
+        },
+        {
+            "name": "round_item",
+            "base": "",
+            "fields": [
+                {
+                    "name": "round",
+                    "type": "uint64"
+                },
+                {
+                    "name": "bills_num",
+                    "type": "uint64"
+                },
+                {
+                    "name": "reward_bucket",
+                    "type": "asset"
+                },
+                {
+                    "name": "start_time",
+                    "type": "uint64"
+                },
+                {
+                    "name": "draw_time",
+                    "type": "uint64"
+                },
+                {
+                    "name": "lucky_key",
+                    "type": "uint64"
+                }
+            ]
+        },
+        {
+            "name": "round_result",
+            "base": "",
+            "fields": [
+                {
+                    "name": "bill_id",
+                    "type": "uint64"
+                },
+                {
+                    "name": "reward",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "setactived",
+            "base": "",
+            "fields": [
+                {
+                    "name": "actived",
+                    "type": "bool"
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "name": "active",
+            "type": "active",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "delaydraw",
+            "type": "delaydraw",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "randomkey",
+            "type": "randomkey",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "setactived",
+            "type": "setactived",
+            "ricardian_contract": ""
+        }
+    ],
+    "tables": [
+        {
+            "name": "bills",
+            "type": "bill_item",
+            "index_type": "i64",
+            "key_names": [],
+            "key_types": []
+        },
+        {
+            "name": "global",
+            "type": "global_item",
+            "index_type": "i64",
+            "key_names": [],
+            "key_types": []
+        },
+        {
+            "name": "roundresults",
+            "type": "round_result",
+            "index_type": "i64",
+            "key_names": [],
+            "key_types": []
+        },
+        {
+            "name": "rounds",
+            "type": "round_item",
+            "index_type": "i64",
+            "key_names": [],
+            "key_types": []
+        }
+    ],
+    "ricardian_clauses": [],
+    "variants": []
+}
