@@ -1,4 +1,5 @@
 # eoslottery
+![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 ### 简介
 基于EOS的福利彩票<br>
 预计实现每小时自动开奖并分发奖励
@@ -23,22 +24,23 @@ eosio-cpp -abigen -I ./ -o lottery.wasm lottery.cpp
 ```
 
 ### action
-
+eosio.token transfer
+active
+delaydraw
 ### eos问题汇总
 https://eosio.stackexchange.com
 
 ### 一些常见问题
+1.provided permissions [{"actor":"lottery1test","permission":"eosio.code"}]
+```shell
+合约账户缺少eosio.token的权限
+解决方法:
+cleos -u https://api-kylin.eoslaomao.com set account permission YOUR_ACCOUNT_NAME active '{"threshold": 1, "keys":[{"key":"YOUR_PUBLIC_KEY", "weight":1}], "accounts":[{"permission":{"actor":"YOUR_ACCOUNT_NAME","permission":"eosio.code"},"weight":1}], "waits":[] }' owner -p YOUR_ACCOUNT_NAME
+```
 
-provided permissions [{"actor":"lottery1test","permission":"eosio.code"}]
-
-asset 运算
-An eosio::asset::amount is of type int64_t, therefore when you divide, any decimal places will be truncated. For example:
-
-int x = 15 / 10; // *should* equal 1.5
-eosio::print(x); // Output will be 1, because the .5 is rounded down because x is an integer
-Therefore, you must be aware that doing division with eosio::asset will cause some loss of precision. However, to do division with eosio::asset, you would do so as follows:
-
-eosio::asset x(15000, eosio::symbol("EOS",4)); // Create 1.5 EOS
+2.asset 运算
+```shell
+An eosio::asset::amount is of type int64_t, therefore when you divide, any decimal places will be truncated.
+如需对asset类进行运算请使用以下的形式防止一些意外的类型转换损失精度
 eosio::asset y(x.amount/10, eosio::symbol("EOS",4)); // Set asset y to have 10th of x
-
-
+```
