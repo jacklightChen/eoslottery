@@ -28,13 +28,13 @@ eosio-cpp -abigen -I ./ -o lottery.wasm lottery.cpp
 合约定时取链上的哈希解析成4个数字来开奖
 
 ### action
-* transfer
+* transfer<br>
 通过apply函数监听eosio.token的transfer转发到这个action进行相关的操作
-* active
+* active<br>
 全局开关
-* delaydraw
-通过二次延迟开奖规避了一些简单的hack
-注:二次延迟开奖依旧无法规避精心设计的deferred action的hack
+* delaydraw<br>
+通过二次延迟开奖规避了一些简单的hack<br>
+注:二次延迟开奖依旧无法规避精心设计的deferred action的hack<br>
 故只适合自己鼓捣 不适合商用
 
 ### eos问题汇总
