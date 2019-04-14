@@ -158,7 +158,7 @@ void lottery::transfer(name from, name to, asset quantity, std::string memo) {
           "transfer number must be integer multiples of key price");
     std::vector <std::string> data;
     data = spilt(memo, ",");
-    check(data.size() == 6, "the count of ticket number should be exactly six");
+    check(data.size() == 4, "the count of ticket number should be exactly four");
     std::vector<int> ticket;
     for (auto s:data) {
         check(stoi(s), "number format failure");
