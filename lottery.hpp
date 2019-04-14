@@ -7,6 +7,10 @@
 
 #define TOKEN_CONTRACT "eosio.token"_n
 #define EOS_SYMBOL symbol("EOS", 4)
+#define FIRST_PRIZE_SHARE 0.5f
+#define SECOND_PRIZE_SHARE 0.2f
+#define THIRD_PRIZE_SHARE 0.1f
+#define FOURTH_PRIZE_SHARE 0.05f
 
 using namespace eosio;
 
@@ -25,7 +29,8 @@ class [[eosio::contract]] lottery : public contract {
         _global.set(_global_state, _self);
     }
     
-    const uint64_t useconds_draw_interval = 2*3600*uint64_t(1000000);
+    //1 hour
+    const uint64_t useconds_draw_interval = uint64_t(3600);
     
     struct [[eosio::table]] global_item {
         asset    key_price;
@@ -47,8 +52,23 @@ class [[eosio::contract]] lottery : public contract {
     };
     
     typedef eosio::multi_index<"bills"_n, bill_item> bills_table;
-  
-    global_item get_default_parameters();
+
+    [[eosio::action]]
+    void active(name actor);
+
+    [[eosio::action]]
+    void setactived(bool actived);
+    
+    [[eosio::action]]
+    void delaydraw();
+    
+    [[eosio::action]]
+    void drawing(name drawer);
+    
+    [[eosio::action]]
+    void draw(name drawer);
+		
+		global_item get_default_parameters();
     
     void newround(name actor);
 
@@ -58,25 +78,22 @@ class [[eosio::contract]] lottery : public contract {
     
     void buykeys(name buyer, asset quantity, std::string memo);
 
-    uint64_t randomkey();
+    checksum256 randomkey();
     
-    [[eosio::action]]
-    void active(name actor);
-
-    [[eosio::action]]
-    void setactived(bool actived);
-    
-    [[eosio::action]]
-    void delaydraw();
-
-    void drawing(name drawer);
-
-    void draw(name drawer);
-		
 		std::vector<std::string> spilt(const std::string &str, const std::string &delim);
 		
-		std::string keytostring(uint64_t randomkey);
-		
+		std::string keytostring(checksum256 randomkey);
+		 [[eosio::action]]
+		void erase(){
+  auto res = _results.find(0);
+  _results.erase(res);
+  res = _results.find(1);
+  _results.erase(res);
+   res = _results.find(2);
+  _results.erase(res);
+  _global_state.cur_round=1;
+  
+}
   private:
     struct [[eosio::table]] round_item {
         uint64_t round;
@@ -84,13 +101,17 @@ class [[eosio::contract]] lottery : public contract {
         asset reward_bucket;
         uint64_t start_time;
         uint64_t draw_time;
-        uint64_t lucky_key;
+        checksum256 lucky_key;
+        std::string lucky_number;
         uint64_t primary_key()const {return round;}
     };
     typedef eosio::multi_index<"rounds"_n, round_item> rounds_table;
     
     struct [[eosio::table]] round_result {
         uint64_t bill_id;
+        name player;
+        std::string data;
+        std::string lucky_number;
         asset    reward;
         uint64_t primary_key()const {return bill_id;}
     };

@@ -12,13 +12,13 @@ void lottery::active(name actor) {
     check(_global_state.active == false, "lottery can't be actived twice!");
     require_auth(actor);
 
-    SEND_INLINE_ACTION(*this, setactived, {_self, "active"_n}, {true});
+    SEND_INLINE_ACTION(*this, setactived, {get_self(), "active"_n}, {true});
 
     newround(actor);
 }
 
 void lottery::setactived(bool actived) {
-    require_auth(_self);
+    require_auth(get_self());
     _global_state.active = actived;
 }
 
@@ -27,9 +27,9 @@ void lottery::newround(name actor) {
     check(next > _global_state.cur_round, "new round number is smaller than or equal with the old!");
 
     asset next_bucket = asset(0, EOS_SYMBOL);
-    auto rnd_pos = _rounds.find(_global_state.cur_round);
-    if (rnd_pos != _rounds.end()) {
-        next_bucket = rnd_pos->reward_bucket;
+    auto rnd = _rounds.find(_global_state.cur_round);
+    if (rnd != _rounds.end()) {
+        next_bucket = rnd->reward_bucket;
     }
 
     _rounds.emplace(actor, [&](round_item &info) {
@@ -39,16 +39,117 @@ void lottery::newround(name actor) {
         info.start_time = current_time_point().sec_since_epoch();
         info.draw_time = 0;
     });
-
+    
     _global_state.cur_round = next;
 }
 
 void lottery::endround() {
+    asset next_bucket = asset(0, EOS_SYMBOL);
+    asset reward_sum = asset(0, EOS_SYMBOL);
+    auto rnd = _rounds.find(_global_state.cur_round);
+    check(rnd != _rounds.end(), "round is missing!");
+    
+    next_bucket = rnd->reward_bucket;
+    
+    std::vector <std::string> win_number;
+    win_number=spilt(rnd->lucky_number,",");
+    int first_prize_num=0;
+    int second_prize_num=0;
+    int third_prize_num=0;
+    int fourth_prize_num=0;
+    
+   
+    bills_table bills(get_self(), _global_state.cur_round);
+    auto it = bills.begin();
+    for (; it!=bills.end(); it++) {
+      std::vector <std::string> data;
+      data = spilt(it->data, ",");
+      int cnt=0;
+      for(int i=0;i<4;i++){
+        if(data[i]==win_number[i]){
+          cnt++;
+        }
+      }
+      switch(cnt){
+        case 4:
+          first_prize_num++; 
+          break;
+        case 3:
+          second_prize_num++;
+          break; 
+        case 2:
+          third_prize_num++;
+          break;
+        case 1:
+          fourth_prize_num++;
+          break;
+        default:
+          break;
+      }
+    }
   
+    it = bills.begin();
+    for (; it!=bills.end(); it++) {
+      std::vector <std::string> data;
+      data = spilt(it->data, ",");
+      int cnt=0;
+      for(int i=0;i<4;i++){
+        if(data[i]==win_number[i]){
+          cnt++;
+        }
+      }
+      
+      double share=0;
+      int division=1;
+      
+      switch(cnt){
+        case 4:
+          share=FIRST_PRIZE_SHARE; 
+          division=first_prize_num;
+          break;
+        case 3:
+          share=SECOND_PRIZE_SHARE; 
+          division=second_prize_num;
+          break; 
+        case 2:
+          share=THIRD_PRIZE_SHARE; 
+          division=third_prize_num;
+          break;
+        case 1:
+          share=FOURTH_PRIZE_SHARE; 
+          division=fourth_prize_num;
+          break;
+        default:
+          break;
+      }
+      
+      if(share>0){
+        action(
+            permission_level{get_self(), "active"_n},
+            "eosio.token"_n,
+            "transfer"_n,
+            std::make_tuple(get_self(), it->player, asset(next_bucket.amount*share/division,EOS_SYMBOL),std::string("reward for bill_id: ") + std::to_string(it->bill_id))
+          ).send();
+        reward_sum=reward_sum + asset(next_bucket.amount*share/division,EOS_SYMBOL);
+      }
+      
+      _results.emplace(get_self(), [&](round_result &info) {
+        info.bill_id = it->bill_id;
+        info.player = it->player;
+        info.data = it->data;
+        info.lucky_number = rnd->lucky_number;
+        info.reward = asset(next_bucket.amount*share/division,EOS_SYMBOL);
+      });
+    }
+   
+    // resolve result
+    _rounds.modify(rnd, get_self(), [&](round_item &info) {
+        info.reward_bucket-=reward_sum;
+    });
 }
 
 void lottery::transfer(name from, name to, asset quantity, std::string memo) {
-    if (from == _self || to != _self) {
+    if (from == get_self() || to != get_self()) {
         return;
     }
     uint64_t num = static_cast<uint64_t>(quantity.amount / _global_state.key_price.amount);
@@ -70,10 +171,10 @@ void lottery::transfer(name from, name to, asset quantity, std::string memo) {
     
     buykeys(from, quantity, memo);
 
-    auto pos = _rounds.find(_global_state.cur_round);
-    check(pos != _rounds.end(), "round number not found");
+    auto rnd = _rounds.find(_global_state.cur_round);
+    check(rnd != _rounds.end(), "round number not found");
 
-    _rounds.modify(pos, get_self(), [&](round_item &info) {
+    _rounds.modify(rnd, get_self(), [&](round_item &info) {
         info.reward_bucket += quantity;
         info.bills_num += 1;
     });
@@ -83,40 +184,46 @@ void lottery::buykeys(name buyer, asset quantity, std::string memo) {
     auto rnd = _rounds.find(_global_state.cur_round);
     check(rnd != _rounds.end(), "round number can't be found in rounds table error!");
 
-    bills_table bills(_self, _global_state.cur_round);
-    bills.emplace(_self, [&](bill_item &info) {
+    auto ct = current_time_point().sec_since_epoch();
+    check(ct < (rnd->start_time + useconds_draw_interval), "this round is end!");
+    
+    bills_table bills(get_self(), _global_state.cur_round);
+    bills.emplace(get_self(), [&](bill_item &info) {
         info.bill_id = bills.available_primary_key();
         info.player = buyer;
         info.data = memo;
-        info.time = current_time_point().sec_since_epoch();
+        info.time = ct;
     });
     _global_state.total_users += 1;
 }
 
 //get sha256 hash
-uint64_t lottery::randomkey() {
+checksum256 lottery::randomkey() {
     checksum256 result;
-    static uint64_t seed = static_cast<uint64_t>((int)&result);
+    auto draw_time=current_time_point().sec_since_epoch();
     auto rnd = _rounds.find(_global_state.cur_round);
-		auto mixedBlock = tapos_block_prefix() + tapos_block_num() + rnd->reward_bucket.amount + seed + current_time_point().sec_since_epoch();
-    seed += (mixedBlock >> 33);
+    check(rnd != _rounds.end(), "round number can't be found in rounds table error!");
+    _rounds.modify(rnd, get_self(), [&](round_item &info) {
+        info.draw_time = draw_time;
+    });
+		auto mixedBlock = tapos_block_prefix() + tapos_block_num() + current_time_point().sec_since_epoch() + draw_time;
     const char *mixedChar = reinterpret_cast<const char *>(&mixedBlock);
 	  result=sha256((char *)mixedChar, sizeof(mixedChar));
 	  return result;
 }
 
 //form lottery number
-std::string lottery::keytostring(uint64_t randomkey){
-		auto checksumBytes = result.extract_as_byte_array().data();
+std::string lottery::keytostring(checksum256 randomkey){
+		auto checksumBytes = randomkey.extract_as_byte_array().data();
     uint64_t num1, num2, num3,num4;
     memcpy(&num1, &checksumBytes[0], sizeof(num1));
     memcpy(&num2, &checksumBytes[7], sizeof(num2));
 	  memcpy(&num3, &checksumBytes[14], sizeof(num3));
 	  memcpy(&num4, &checksumBytes[21], sizeof(num4));
-	  num1=num1%33;
-	  num2=num2%33;
-	  num3=num3%33;
-	  num4=num4%33;
+	  num1=(num1%33) + 1;
+	  num2=(num2%33) + 1;
+	  num3=(num3%33) + 1;
+	  num4=(num4%33) + 1;
 	  std::string lottery_number=std::to_string(num1)+std::string(",")+std::to_string(num2)+std::string(",")+std::to_string(num3)+std::string(",")+std::to_string(num4);
 	  return lottery_number;
 }
@@ -126,90 +233,39 @@ void lottery::delaydraw() {
 
     check(_global_state.active == true, "lottery has not been actived!");
 
-    auto pos = _rounds.find(_global_state.cur_round);
-    check(pos != _rounds.end(), "round is missing!");
-    // check(pos->last_key > 0, "none buy keys");
+    auto rnd = _rounds.find(_global_state.cur_round);
+    check(rnd != _rounds.end(), "round is missing!");
 
     auto ct = current_time_point().sec_since_epoch();
-    check(ct > (pos->start_time + useconds_draw_interval), "draw time has not cool down!");
+    check(ct > (rnd->start_time + useconds_draw_interval), "draw time has not cool down!");
 
     transaction dr;
-    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "drawing"_n, get_self());
+    dr.actions.emplace_back(permission_level{get_self(), "active"_n}, get_self(), "drawing"_n, std::make_tuple(get_self()));
     dr.delay_sec = 1;
-    dr.send(get_self().value, _self);
+    dr.send(get_self().value, get_self());
 }
 
 void lottery::drawing(name drawer) {
     require_auth(get_self());
-
     transaction dr;
-    dr.actions.emplace_back(permission_level{_self, "active"_n}, _self, "draw"_n, get_self());
+    dr.actions.emplace_back(permission_level{get_self(), "active"_n}, get_self(), "draw"_n, std::make_tuple(get_self()));
     dr.delay_sec = 1;
     dr.send(get_self().value, get_self());
 }
 
 void lottery::draw(name drawer) {
     require_auth(get_self());
-
-    auto pos = _rounds.find(_global_state.cur_round);
-
-    auto ct = current_time_point().sec_since_epoch();
-
-    // uint64_t lucky_key = randomkey(pos->last_key);
-    std::vector <int> temp;
-    bills_table bills(_self, _global_state.cur_round);
-    auto it = bills.begin();
-    int dj=0;
-    for (; it!=bills.end(); it++) {
-      std::vector <std::string> data;
-      data = spilt(it->data, ",");
-      check(data.size()==6,"the count of ticket number should be exactly six");
-      std::vector <int> ticket;
-      for(auto s:data){
-        check(stoi(s),"number format failure");
-        ticket.push_back(stoi(s));
-      }
-     dj++;
-    }
-    // action(
-    //       permission_level{get_self(), "active"_n},
-    //       "eosio.token"_n,
-    //       "transfer"_n,
-    //       std::make_tuple(get_self(), "testacc3bysj"_n, asset(1000, EOS_SYMBOL),std::string("reward"))
-    // ).send();
-    asset next_bucket = asset(0, EOS_SYMBOL);
-    if (pos != _rounds.end()) {
-        next_bucket = pos->reward_bucket;
-    }
+    checksum256 lucky_key = randomkey();
     
-    asset reward_sum = asset(0, EOS_SYMBOL);
-   
-    it = bills.begin();
-    for (; it!=bills.end(); it++) {
-      action(
-            permission_level{get_self(), "active"_n},
-            "eosio.token"_n,
-            "transfer"_n,
-            std::make_tuple(get_self(), it->player, next_bucket/10/dj,std::string("reward for bill_id: ") + std::to_string(it->bill_id))
-      ).send();
-      reward_sum+=next_bucket/10/dj;
-      
-    }
-    
-    // resolve result
-    
-    _rounds.modify(pos, get_self(), [&](round_item &info) {
-        // info.draw_account = drawer;
-        info.reward_bucket-=reward_sum;
-        info.draw_time = ct;
-        // info.lucky_key = lucky_key;
+    auto rnd = _rounds.find(_global_state.cur_round);
+    check(rnd != _rounds.end(), "round is missing!");
+    _rounds.modify(rnd, get_self(), [&](round_item &info) {
+       info.lucky_key=lucky_key;
+       info.lucky_number=keytostring(lucky_key);
     });
-
-    // endround();
-    // newround(_self);
-
-    // erasehistory(_global_state.cur_round - HISTORY_NUM, 1);
-
+   
+    endround();
+    newround(get_self());
 }
 
 std::vector <std::string> lottery::spilt(const std::string &str, const std::string &delim) {
@@ -248,5 +304,5 @@ extern "C" {                                                               \
     }                                                                      \
 }
 
-EOSIO_DISPATCH(lottery, (active)(randomkey)(setactived)(delaydraw))
+EOSIO_DISPATCH(lottery, (active)(setactived)(delaydraw)(drawing)(draw)(erase))
 

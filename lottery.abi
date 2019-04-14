@@ -41,6 +41,31 @@
             "fields": []
         },
         {
+            "name": "draw",
+            "base": "",
+            "fields": [
+                {
+                    "name": "drawer",
+                    "type": "name"
+                }
+            ]
+        },
+        {
+            "name": "drawing",
+            "base": "",
+            "fields": [
+                {
+                    "name": "drawer",
+                    "type": "name"
+                }
+            ]
+        },
+        {
+            "name": "erase",
+            "base": "",
+            "fields": []
+        },
+        {
             "name": "global_item",
             "base": "",
             "fields": [
@@ -61,11 +86,6 @@
                     "type": "bool"
                 }
             ]
-        },
-        {
-            "name": "randomkey",
-            "base": "",
-            "fields": []
         },
         {
             "name": "round_item",
@@ -93,7 +113,11 @@
                 },
                 {
                     "name": "lucky_key",
-                    "type": "uint64"
+                    "type": "checksum256"
+                },
+                {
+                    "name": "lucky_number",
+                    "type": "string"
                 }
             ]
         },
@@ -104,6 +128,18 @@
                 {
                     "name": "bill_id",
                     "type": "uint64"
+                },
+                {
+                    "name": "player",
+                    "type": "name"
+                },
+                {
+                    "name": "data",
+                    "type": "string"
+                },
+                {
+                    "name": "lucky_number",
+                    "type": "string"
                 },
                 {
                     "name": "reward",
@@ -134,8 +170,18 @@
             "ricardian_contract": ""
         },
         {
-            "name": "randomkey",
-            "type": "randomkey",
+            "name": "draw",
+            "type": "draw",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "drawing",
+            "type": "drawing",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "erase",
+            "type": "erase",
             "ricardian_contract": ""
         },
         {
