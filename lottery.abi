@@ -61,11 +61,6 @@
             ]
         },
         {
-            "name": "erase",
-            "base": "",
-            "fields": []
-        },
-        {
             "name": "global_item",
             "base": "",
             "fields": [
@@ -177,11 +172,6 @@
         {
             "name": "drawing",
             "type": "drawing",
-            "ricardian_contract": ""
-        },
-        {
-            "name": "erase",
-            "type": "erase",
             "ricardian_contract": ""
         },
         {
